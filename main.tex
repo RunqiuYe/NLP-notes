@@ -1,4 +1,5 @@
 \documentclass[a4paper]{article}
+\usepackage{parskip}
 
 \def\nterm {Spring}
 \def\nyear {2025}
@@ -63,9 +64,9 @@ in later sections.
   \end{enumerate}
 \end{enumerate}
 
-\section{Language Modeling Fundamentals}
+\section{Language modeling fundamentals}
 
-\subsection{Neural Networks and Auto Differentiation}
+\subsection{Neural networks and auto differentiation}
 This process calculates the gradient of the loss with 
 respect to different parameters. Use computational graph 
 and chain rule to compute back propogation efficiently, 
@@ -75,7 +76,7 @@ the model parameters.
 Other than PyTorch, TensorFlow and JAX are also popular 
 neural network frameworks with different advantages.
 
-\subsection{Language and Sequence Modeling} 
+\subsection{language and sequence modeling} 
 
 In language modeling, other than binary or multi-class 
 classification, sometimes there are exponential/infinitely
@@ -129,17 +130,18 @@ To evaluate the model, we can use the \textbf{log-likelihood}
 and the \textbf{perplexity} of the model. The log-likelihood 
 is simply defined as 
 \[
-  \mathrm{LL}(\mathcal{X}_{\text{test}}) 
+  \operatorname{LL}(\mathcal{X}_{\text{test}}) 
   = \sum_{X \in \mathcal{X}_{\text{test}}} \log p(X).
 \]
 We can also use the per-word log-likelihood 
-$\mathrm{WLL}(\mathcal{X}_{\text{test}})$,
+$\operatorname{WLL}(\mathcal{X}_{\text{test}})$,
 which is defined as the log-likelihood divided by the 
 length of the test data.
 The perplexity of the model is 
-$\exp \left( -\mathrm{WLL(\mathcal{X}_{\text{test}})} \right)$,
+$\exp \left( -\operatorname{WLL}(\mathcal{X}_{\text{test}}) \right)$,
 which can be used to simulate the number of tries it need to 
-take before getting the correct prediction.
+take before getting the correct prediction. Therefore, 
+lower perplexity is better!
 
 The bigram models or N-gram models in general have a lot of problems.
 When $N$ gets large, the number of parameters will grow 
@@ -166,9 +168,9 @@ This actually correspond to cross entropy loss.
 An example structure of this is shown in Figure 
 \ref{feedforward-nn-lm}.
 
-\begin{figure}
+\begin{figure}[h!]
   \centering
-  \includegraphics[width=0.6\linewidth]{figs/forward-nn-lm.jpg}
+  \includegraphics[width=0.5\linewidth]{figs/forward-nn-lm.jpg}
   \caption{An illustration of feedforward neural language 
   model.}
   \label{feedforward-nn-lm}
@@ -196,5 +198,128 @@ we also have consine learning rate schedule and warmup
 techniques.
 
 Check out paper to learn more about these methods.
+
+\section{Recurrent neural networks}
+
+\subsection{Setup of recurrent neural networks}
+A \textbf{sequence model} takes in a sequence $x_1, \dots,
+x_T$ and output some hidden state 
+\[
+f_\theta(x_1, \dots, x_T) \to h_1, \dots, h_T,
+\]
+where $h_t \in \R^d$. For language modeling, we can have 
+\[
+p_\theta(\cdot \mid x_{<t}) = \softmax (W h_t^T),
+\]
+where $W$ is some matrix we learned. 
+In contrast, a \textbf{recurrent neural network} (RNN)
+has the following recurrence 
+\[
+h_t = \sigma(W_h h_{t-1} + W_x x_t + b),
+\]
+where $\sigma$ is some activation function (tanh, ReLU, \dots).
+The parameters of the RNN model are $W_h \in \R^{d \times d}$, 
+$W_x \in \R^{d \times d}$, and $b \in \R^d$.
+
+RNN can be used for several applications. We can just 
+run the RNN on a input sequence and use the final hidden 
+state to do sentiment analysis. We can also train 
+an output matrix $W$ and use the hidden states to 
+produce a sequence.
+
+To train RNNs, we need to construct loss for each 
+output (or just the final output if we are doing, 
+for example, sentiment analysis) and run the back propogation
+algorithm to compute the gradients.
+
+Note that in RNNs, computing $h_t$ requires $h_{t-1}$, 
+$h_{t-2}$, \dots, so it is hard to parallelize the training
+process. Also, for inference, we generate one token, 
+use the new hidden state (newly generated token) for the 
+next step, and repeat. We only need to store previous 
+hidden state and the computation for a length $T$ sequence
+is simply $T$ times the cost of a local computation.
+
+\subsection{Vanishing gradient}
+
+\begin{figure}[h!]
+  \centering 
+  \includegraphics[width=0.5\linewidth]{figs/vanish-grad.png}
+  \caption{An illustration of vanishing gradient in RNNs.}
+  \label{vanish-grad}
+\end{figure}
+
+One problem with RNNs is vanishing gradient, which 
+makes the model struggle to learn long-term dependencies.
+A illustration of vanishing gradient is in Figure \ref{vanish-grad}.
+The mathematical detail can be seen through the following 
+equation and derivation. 
+
+*** TO-DO: add math for vanish grad *** 
+
+A solution to this problem is gating and additive 
+connections. The basic idea is to 
+pass information across timesteps with a learned 
+``gate'' $z_t$, and the recurrence would just be 
+\[
+h_t = (1 - z_t) h_{t-1} + z_t \tilde{h_t}.
+\]
+More concretely, we replace each RNN black with a Gated 
+Recurrent Unit (GRU). 
+The GRU has two gates: a ``reset gate'' and an ``update gate''.
+The update gate $z_t$ controls how much of the previous 
+hidden state should be passed to the current hidden state. 
+The reset gate $r_t$ determines how much of the past 
+information to forget.
+The equations for the GRU are as follows:
+\[
+\begin{aligned}
+z_t &= \sigma(W_z x_t + U_z h_{t-1} + b_z), \\
+r_t &= \sigma(W_r x_t + U_r h_{t-1} + b_r), \\
+\tilde{h}_t &= \tanh(W_h x_t + r_t \odot (U_h h_{t-1}) + b_h), \\
+h_t &= (1 - z_t) \odot h_{t-1} + z_t \odot \tilde{h}_t, \\
+\end{aligned}
+\]
+where in the third equation $\tilde{h_t}$ is a ``candidate state''
+and the fourth equation gives recurrent update rule.
+
+A similar but improved architecture compared to GRU 
+is Long Short Term Memory (LSTM).
+
+*** TO-DO: add architecture for LSTM ***
+
+\subsection{Encoder-decoder}
+
+The motivation is conditional generation -- generate 
+a sequence given a sequence with $p_\theta (y_1, \dots, y_T 
+\mid x)$. These models are historically developed for machine 
+translation, dialogues, etc.
+The architecture of encoder-decoder is 
+illustrated in Figure \ref{encode-decode}. The first 
+RNN (encoder) read in the sequence $x$ to generate 
+the final hidden state (context vector) to represent the whole sequence. 
+Then, the second RNN use the context vector to initialize
+the inital hidden state and hence generate a new sequence.
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=0.6\linewidth]{figs/encode-decode.png}
+  \caption{An illustration of encoder-decoder architecture.}
+  \label{encode-decode}
+\end{figure}
+
+Typically, the parameters of the two RNNs are separator. 
+Additionally, having a differentiable connection 
+between the two RNNs is important, as the decoder 
+need to learn its parameters from the sequence 
+generated and the corresponding loss function.
+
+Encoder-decoder only has one context vector for the 
+whole sequence. Can we do better?
+
+\subsection{Attention}
+
+
+
 
 \end{document}
